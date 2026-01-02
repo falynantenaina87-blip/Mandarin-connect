@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api } from '../services/backend';
-import { User, Message } from '../types';
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { User } from '../types';
 import { Send, Globe, Loader2 } from 'lucide-react';
 
 interface ChatProps {
@@ -8,22 +9,16 @@ interface ChatProps {
 }
 
 const Chat: React.FC<ChatProps> = ({ currentUser }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // useQuery s'abonne aux données temps réel : plus besoin de setInterval/polling !
+  const messages = useQuery(api.main.listMessages) || [];
+  
+  const sendMessage = useMutation(api.main.sendMessage);
+  const translate = useAction(api.actions.translateText);
+
   const [input, setInput] = useState('');
   const [translating, setTranslating] = useState(false);
   const [pendingTranslation, setPendingTranslation] = useState<{hanzi: string, pinyin: string} | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const fetchMessages = async () => {
-    const msgs = await api.chat.list();
-    setMessages(msgs);
-  };
-
-  useEffect(() => {
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 2000); // Polling for mobile simulation
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -34,15 +29,14 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
     if (!input.trim()) return;
 
     try {
-      await api.chat.send(
-        input, 
-        currentUser.id, 
-        !!pendingTranslation, 
-        pendingTranslation?.pinyin
-      );
+      await sendMessage({
+        content: input, 
+        user_id: currentUser.id as any, 
+        is_mandarin: !!pendingTranslation, 
+        pinyin: pendingTranslation?.pinyin
+      });
       setInput('');
       setPendingTranslation(null);
-      await fetchMessages();
     } catch (error) {
       console.error("Failed to send message", error);
     }
@@ -52,7 +46,8 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
     if (!input.trim()) return;
     setTranslating(true);
     try {
-      const result = await api.ai.translate(input);
+      // Appel à l'action IA côté serveur (protège la clé API)
+      const result = await translate({ text: input });
       setPendingTranslation(result);
       setInput(result.hanzi);
     } catch (error) {
@@ -80,10 +75,10 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[#0B0B15]/50">
-        {messages.map((msg) => {
+        {messages.map((msg: any) => {
           const isMe = msg.user_id === currentUser.id;
           return (
-            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+            <div key={msg._id || msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] md:max-w-[70%] rounded-2xl px-5 py-3.5 shadow-md ${
                 isMe 
                   ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white rounded-br-none' 

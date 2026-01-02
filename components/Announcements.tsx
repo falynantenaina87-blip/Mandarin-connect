@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { api } from '../services/backend';
-import { User, UserRole, Announcement } from '../types';
+import React, { useState, useRef } from 'react';
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { User, UserRole } from '../types';
 import { Bell, Plus, Trash2, AlertTriangle, Image as ImageIcon, Sparkles, Wand2, Upload, X } from 'lucide-react';
 
 interface AnnouncementsProps {
@@ -8,7 +9,13 @@ interface AnnouncementsProps {
 }
 
 const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  // Récupération automatique des données temps réel
+  const announcements = useQuery(api.main.listAnnouncements) || [];
+  
+  const postAnnouncement = useMutation(api.main.postAnnouncement);
+  const deleteAnnouncement = useMutation(api.main.deleteAnnouncement);
+  const generateImage = useAction(api.actions.generateImage);
+
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -23,25 +30,18 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
 
   const canEdit = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.DELEGATE;
 
-  const fetchAnnouncements = async () => {
-    const data = await api.announcements.list();
-    setAnnouncements(data);
-  };
-
-  useEffect(() => {
-    fetchAnnouncements();
-    const interval = setInterval(fetchAnnouncements, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newContent) return;
     
-    // Use generated image if available
     const finalImage = generatedImage || null;
 
-    await api.announcements.post(newTitle, newContent, isUrgent ? 'URGENT' : 'NORMAL', finalImage || undefined);
+    await postAnnouncement({
+        title: newTitle, 
+        content: newContent, 
+        priority: isUrgent ? 'URGENT' : 'NORMAL', 
+        imageUrl: finalImage || undefined
+    });
     
     // Reset Form
     setNewTitle('');
@@ -51,13 +51,11 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
     setBaseImage(null);
     setImagePrompt('');
     setShowForm(false);
-    fetchAnnouncements();
   };
 
   const handleDelete = async (id: string) => {
     if (confirm("Supprimer cette annonce ?")) {
-      await api.announcements.delete(id);
-      fetchAnnouncements();
+      await deleteAnnouncement({ id: id as any });
     }
   };
 
@@ -68,7 +66,7 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setBaseImage(reader.result as string);
-        setGeneratedImage(null); // Reset generated if user uploads new base
+        setGeneratedImage(null);
       };
       reader.readAsDataURL(file);
     }
@@ -79,10 +77,13 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
     
     setIsGeneratingImg(true);
     try {
-      // Use prompt input, or fallback to "Summarize this: [Title] [Content]"
       const promptToUse = imagePrompt || `Create a vibrant illustration summarizing this announcement: ${newTitle}. ${newContent}`;
       
-      const result = await api.ai.generateImage(promptToUse, baseImage || undefined);
+      const result = await generateImage({
+        prompt: promptToUse, 
+        baseImage: baseImage || undefined
+      });
+      
       if (result) {
         setGeneratedImage(result);
       }
@@ -251,9 +252,9 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
       )}
 
       <div className="grid gap-5">
-        {announcements.map((ann) => (
+        {announcements.map((ann: any) => (
           <div 
-            key={ann.id} 
+            key={ann._id || ann.id} 
             className={`bg-[#151521] rounded-2xl overflow-hidden relative transition-all duration-300 hover:translate-y-[-2px] hover:shadow-xl border ${
                 ann.priority === 'URGENT' 
                 ? 'border-fuchsia-500/30 shadow-[0_0_20px_rgba(232,121,249,0.05)]' 
@@ -289,7 +290,7 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
                 </div>
                 {canEdit && (
                     <button 
-                    onClick={() => handleDelete(ann.id)}
+                    onClick={() => handleDelete(ann._id || ann.id)}
                     className="p-2.5 text-slate-500 hover:text-red-400 bg-[#0B0B15] rounded-xl border border-[#2A2A35] hover:border-red-500/30 transition-all ml-4"
                     >
                     <Trash2 size={18} />

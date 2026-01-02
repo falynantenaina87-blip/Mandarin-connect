@@ -38,7 +38,7 @@ export const generateQuiz = action({
   handler: async (ctx, args) => {
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3-pro-preview',
         contents: `You are an expert Mandarin teacher. Generate 5 multiple-choice questions for a beginner about: "${args.topic}". Return JSON array.`,
         config: {
           responseMimeType: "application/json",
@@ -71,11 +71,25 @@ export const generateImage = action({
     try {
       const parts: any[] = [];
       if (args.baseImage) {
-        const cleanBase64 = args.baseImage.split(',')[1] || args.baseImage;
+        let mimeType = 'image/jpeg';
+        let data = args.baseImage;
+
+        // Correctly extract MIME type and data if it's a data URL
+        if (args.baseImage.startsWith('data:')) {
+            const matches = args.baseImage.match(/^data:([^;]+);base64,(.+)$/);
+            if (matches) {
+                mimeType = matches[1];
+                data = matches[2];
+            }
+        } else {
+            // Fallback: try to strip header if present, assume jpeg otherwise
+            data = args.baseImage.split(',')[1] || args.baseImage;
+        }
+
         parts.push({
           inlineData: {
-            data: cleanBase64,
-            mimeType: 'image/jpeg',
+            data: data,
+            mimeType: mimeType,
           },
         });
       }

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../services/backend';
-import { User, UserRole, ScheduleItem } from '../types';
+import React, { useState } from 'react';
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { User, UserRole } from '../types';
 import { Calendar, Clock, MapPin, Plus, Trash2 } from 'lucide-react';
 
 interface ScheduleProps {
@@ -8,7 +9,10 @@ interface ScheduleProps {
 }
 
 const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const schedule = useQuery(api.main.listSchedule) || [];
+  const addSchedule = useMutation(api.main.addScheduleItem);
+  const deleteSchedule = useMutation(api.main.deleteScheduleItem);
+
   const [showForm, setShowForm] = useState(false);
   
   // Form State
@@ -19,20 +23,10 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
 
   const canEdit = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.DELEGATE;
 
-  const fetchSchedule = async () => {
-    const data = await api.schedule.list();
-    setSchedule(data);
-  };
-
-  useEffect(() => {
-    fetchSchedule();
-  }, []);
-
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!time || !subject || !room) return;
-    await api.schedule.add({ day, time, subject, room });
-    setSchedule(await api.schedule.list());
+    await addSchedule({ day, time, subject, room });
     setShowForm(false);
     setTime('');
     setSubject('');
@@ -41,8 +35,7 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
 
   const handleDelete = async (id: string) => {
     if (confirm('Supprimer ce cours ?')) {
-      await api.schedule.delete(id);
-      fetchSchedule();
+      await deleteSchedule({ id: id as any });
     }
   };
 
@@ -118,7 +111,7 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {daysOrder.map(d => {
-            const dayItems = schedule.filter(s => s.day === d);
+            const dayItems = schedule.filter((s: any) => s.day === d);
             if (dayItems.length === 0) return null;
             
             return (
@@ -128,8 +121,8 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
                         {d}
                     </div>
                     <div className="divide-y divide-[#2A2A35]">
-                        {dayItems.map(item => (
-                            <div key={item.id} className="p-6 hover:bg-[#1A1A2A] transition-colors group relative">
+                        {dayItems.map((item: any) => (
+                            <div key={item._id || item.id} className="p-6 hover:bg-[#1A1A2A] transition-colors group relative">
                                 <div className="flex items-start justify-between">
                                     <div>
                                         <h4 className="font-bold text-lg text-white mb-2">{item.subject}</h4>
@@ -142,7 +135,7 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
                                     </div>
                                     {canEdit && (
                                         <button 
-                                            onClick={() => handleDelete(item.id)}
+                                            onClick={() => handleDelete(item._id || item.id)}
                                             className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition"
                                         >
                                             <Trash2 size={18} />

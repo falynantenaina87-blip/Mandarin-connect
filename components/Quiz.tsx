@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../services/backend';
-import { User, QuizQuestion, QuizResult } from '../types';
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { User } from '../types';
 import { Brain, Sparkles, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -8,24 +9,27 @@ interface QuizProps {
   currentUser: User;
 }
 
-const DEFAULT_QUIZ = api.quiz.getDefaultQuiz();
+// Temporary default quiz while waiting for generation
+const DEFAULT_QUIZ = [
+  { id: 'q1', question: 'Comment dit-on "Bonjour" ?', options: ['Ni hao', 'Zai jian', 'Xie xie', 'Bu ke qi'], correctAnswer: 'Ni hao', explanation: '"Ni hao" (你好) est la salutation standard.' },
+];
 
 const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
-  const [questions, setQuestions] = useState<QuizQuestion[]>(DEFAULT_QUIZ);
+  const previousResult = useQuery(api.main.checkQuizSubmission, { user_id: currentUser.id as any });
+  const submitQuiz = useMutation(api.main.submitQuizResult);
+  const generateQuiz = useAction(api.actions.generateQuiz);
+
+  const [questions, setQuestions] = useState<any[]>(DEFAULT_QUIZ);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [topic, setTopic] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [previousResult, setPreviousResult] = useState<QuizResult | null>(null);
   
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isAnswerChecked, setIsAnswerChecked] = useState(false);
 
-  useEffect(() => {
-    api.quiz.checkSubmission(currentUser.id).then(setPreviousResult);
-  }, [currentUser]);
-
+  // When we have a previous result, we don't need to load questions yet
   const hasHistory = !!previousResult;
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -33,16 +37,16 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
     if (!topic.trim()) return;
     
     setGenerating(true);
+    // Reset state locally to hide result
     setShowResult(false);
     
     try {
-      const aiQuestions = await api.ai.generateQuiz(topic);
+      const aiQuestions = await generateQuiz({ topic });
       setQuestions(aiQuestions);
       setScore(0);
       setCurrentQuestionIndex(0);
       setSelectedOption(null);
       setIsAnswerChecked(false);
-      setPreviousResult(null); // Clear history visually to show new quiz
     } catch (e) {
       console.error(e);
       alert("Erreur lors de la génération du quiz.");
@@ -73,7 +77,11 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
 
   const finishQuiz = async () => {
     setShowResult(true);
-    await api.quiz.submit(currentUser.id, score, questions.length);
+    await submitQuiz({
+        user_id: currentUser.id as any,
+        score: score,
+        total: questions.length
+    });
   };
 
   const retry = () => {
@@ -83,7 +91,6 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
     setSelectedOption(null);
     setIsAnswerChecked(false);
     setQuestions(DEFAULT_QUIZ);
-    setPreviousResult(null);
   };
 
   // --- VIEW: Result (History or Just Finished) ---

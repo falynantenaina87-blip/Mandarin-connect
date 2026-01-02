@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { api } from '../services/backend';
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
 import { User, UserRole } from '../types';
 import { Lock, Mail, User as UserIcon, AlertCircle } from 'lucide-react';
 
@@ -15,6 +16,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Hook Convex pour appeler les fonctions backend
+  const loginMutation = useMutation(api.main.login);
+  const registerMutation = useMutation(api.main.register);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -22,20 +27,29 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     try {
       let user;
       if (isRegistering) {
-        let role = UserRole.STUDENT;
-        if (email.toLowerCase().includes('admin')) {
-            role = UserRole.ADMIN;
-        } else if (email.toLowerCase().includes('delegue')) {
-            role = UserRole.DELEGATE;
-        }
+        let role = 'élève';
+        if (email.toLowerCase().includes('admin')) role = 'admin';
+        if (email.toLowerCase().includes('delegue')) role = 'délégué';
 
-        user = await api.auth.register(email, password, name, role);
+        // Appel au vrai backend
+        user = await registerMutation({ email, password, name, role });
       } else {
-        user = await api.auth.login(email, password);
+        // Appel au vrai backend
+        user = await loginMutation({ email, password });
       }
-      onLogin(user);
+      
+      // Adaptation du format ID Convex vers string pour l'app
+      const appUser: User = {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role as UserRole
+      };
+      
+      onLogin(appUser);
     } catch (err: any) {
-      setError(err.message || "Une erreur est survenue");
+      console.error(err);
+      setError(err.message.includes("Invalid") ? "Identifiants incorrects" : "Erreur: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -47,7 +61,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-600/20 rounded-full blur-[128px]"></div>
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full blur-[128px]"></div>
 
-      {/* Frame Removed: removed bg, border, shadow classes */}
       <div className="w-full max-w-md p-8 relative z-10">
         <div className="text-center mb-10">
           <h1 className="text-5xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent font-chinese mb-3">Mandarin Connect</h1>
