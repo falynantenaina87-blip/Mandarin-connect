@@ -46,7 +46,9 @@ const saveState = () => {
 };
 
 // --- Google Gemini Setup ---
-const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Use import.meta.env for Vite compatibility
+const apiKey = (import.meta as any).env.VITE_API_KEY || ''; 
+const ai = new GoogleGenAI({ apiKey });
 
 // --- API Service Simulation ---
 
@@ -145,7 +147,7 @@ export const api = {
   ai: {
     translate: async (text: string): Promise<TranslationResponse> => {
       try {
-        const response = await genAI.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: `Translate the following text (which is in French or English) into Simplified Chinese (Hanzi). Also provide the Pinyin.
             Text: "${text}"`,
@@ -166,13 +168,14 @@ export const api = {
         return JSON.parse(jsonText) as TranslationResponse;
       } catch (e) {
         console.error("AI Error:", e);
+        // Fallback for demo if no API key
         return { hanzi: "你好 (Simulation)", pinyin: "Nǐ hǎo" };
       }
     },
 
     generateQuiz: async (topic: string): Promise<QuizQuestion[]> => {
       try {
-        const response = await genAI.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: `You are an expert Mandarin teacher. Generate 5 multiple-choice quiz questions for a beginner/intermediate student based on the topic: "${topic}".
             Return a JSON array.`,
@@ -219,7 +222,7 @@ export const api = {
         }
         parts.push({ text: prompt });
 
-        const response = await genAI.models.generateContent({
+        const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
           contents: { parts },
         });
@@ -234,7 +237,7 @@ export const api = {
         throw new Error("No image generated.");
       } catch (e) {
         console.error("AI Image Generation Error:", e);
-        throw e;
+        return undefined;
       }
     }
   }

@@ -22,7 +22,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     try {
       let user;
       if (isRegistering) {
-        // Simple Role detection for Demo
         let role = UserRole.STUDENT;
         if (email.toLowerCase().includes('admin')) {
             role = UserRole.ADMIN;

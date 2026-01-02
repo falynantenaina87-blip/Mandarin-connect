@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { HashRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { User, UserRole } from './types';
-import { api } from './services/backend';
+import { User } from './types';
 import Auth from './components/Auth';
 import Chat from './components/Chat';
 import Announcements from './components/Announcements';
@@ -10,24 +9,13 @@ import Quiz from './components/Quiz';
 import { MessageSquare, Bell, Calendar, Brain, LogOut, User as UserIcon } from 'lucide-react';
 
 const App: React.FC = () => {
+  // Simple local state for the logged-in user in this session.
+  // In a full production app, you might use Convex Auth or Clerk.
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const initAuth = async () => {
-      const storedUser = await api.auth.getCurrentUser();
-      setUser(storedUser);
-      setLoading(false);
-    };
-    initAuth();
-  }, []);
 
   const handleLogout = () => {
-    api.auth.logout();
     setUser(null);
   };
-
-  if (loading) return <div className="h-screen flex items-center justify-center text-slate-500">Chargement...</div>;
 
   if (!user) {
     return <Auth onLogin={setUser} />;

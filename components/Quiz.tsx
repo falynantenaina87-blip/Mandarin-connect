@@ -8,12 +8,13 @@ interface QuizProps {
   currentUser: User;
 }
 
+const DEFAULT_QUIZ = api.quiz.getDefaultQuiz();
+
 const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [questions, setQuestions] = useState<QuizQuestion[]>(DEFAULT_QUIZ);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [topic, setTopic] = useState('');
   const [generating, setGenerating] = useState(false);
   const [previousResult, setPreviousResult] = useState<QuizResult | null>(null);
@@ -22,33 +23,26 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
   const [isAnswerChecked, setIsAnswerChecked] = useState(false);
 
   useEffect(() => {
-    checkHistory();
-  }, []);
+    api.quiz.checkSubmission(currentUser.id).then(setPreviousResult);
+  }, [currentUser]);
 
-  const checkHistory = async () => {
-    setLoading(true);
-    const prev = await api.quiz.checkSubmission(currentUser.id);
-    if (prev) {
-      setPreviousResult(prev);
-    } else {
-      setQuestions(api.quiz.getDefaultQuiz());
-    }
-    setLoading(false);
-  };
+  const hasHistory = !!previousResult;
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
     
     setGenerating(true);
-    setPreviousResult(null);
-    setScore(0);
-    setCurrentQuestionIndex(0);
     setShowResult(false);
     
     try {
       const aiQuestions = await api.ai.generateQuiz(topic);
       setQuestions(aiQuestions);
+      setScore(0);
+      setCurrentQuestionIndex(0);
+      setSelectedOption(null);
+      setIsAnswerChecked(false);
+      setPreviousResult(null); // Clear history visually to show new quiz
     } catch (e) {
       console.error(e);
       alert("Erreur lors de la génération du quiz.");
@@ -83,41 +77,35 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
   };
 
   const retry = () => {
-    setPreviousResult(null);
     setScore(0);
     setCurrentQuestionIndex(0);
     setShowResult(false);
     setSelectedOption(null);
     setIsAnswerChecked(false);
-    setQuestions(api.quiz.getDefaultQuiz());
+    setQuestions(DEFAULT_QUIZ);
+    setPreviousResult(null);
   };
 
-  if (loading) {
-    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div></div>;
-  }
-
   // --- VIEW: Result (History or Just Finished) ---
-  if (previousResult || showResult) {
-    const finalScore = previousResult ? previousResult.score : score;
-    const finalTotal = previousResult ? previousResult.total : questions.length;
+  if ((hasHistory && !generating && questions === DEFAULT_QUIZ) || showResult) {
+    const finalScore = showResult ? score : (previousResult?.score || 0);
+    const finalTotal = showResult ? questions.length : (previousResult?.total || 1);
     const percentage = Math.round((finalScore / finalTotal) * 100);
 
     const data = [
       { name: 'Correct', value: finalScore },
       { name: 'Incorrect', value: finalTotal - finalScore },
     ];
-    // Green (Success) and Red (Error) but adapted to theme
     const COLORS = ['#10b981', '#ef4444']; 
 
     return (
       <div className="max-w-md mx-auto bg-[#151521] p-8 rounded-3xl shadow-2xl border border-[#2A2A35] text-center mt-8">
         <h2 className="text-2xl font-bold text-white mb-2">Résultat du Quiz</h2>
         <p className="text-slate-400 mb-8">
-            {previousResult ? "Votre dernier résultat enregistré" : "Quiz terminé !"}
+            {showResult ? "Quiz terminé !" : "Votre dernier résultat enregistré"}
         </p>
         
         <div className="h-64 w-full mb-8 relative">
-            {/* Center Text for Chart */}
             <div className="absolute inset-0 flex items-center justify-center flex-col">
                 <span className="text-5xl font-bold text-white">{percentage}%</span>
             </div>
@@ -148,7 +136,7 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
             onClick={retry}
             className="flex items-center justify-center gap-2 w-full py-4 bg-[#2A2A35] text-white rounded-xl hover:bg-[#3A3A4A] transition border border-[#3A3A4A] font-semibold"
         >
-            <RotateCcw size={20} /> Nouveau Quiz
+            <RotateCcw size={20} /> Recommencer / Générer
         </button>
       </div>
     );
@@ -204,7 +192,7 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
         </h3>
 
         <div className="space-y-4 mb-8">
-            {currentQ.options.map((option, idx) => {
+            {currentQ.options.map((option: string, idx: number) => {
                 let btnClass = "w-full text-left p-5 rounded-2xl border transition-all font-medium text-lg relative overflow-hidden ";
                 
                 if (isAnswerChecked) {
